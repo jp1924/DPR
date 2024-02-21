@@ -21,6 +21,7 @@ from transformers.utils import ModelOutput
 from configuration_dpr import CustomDPRContrastiveConfig
 
 
+# copied from: https://github.com/TmaxEdu/KorDPR/blob/master/trainer.py#L92
 def ibn_loss(pred: torch.FloatTensor):
     """in-batch negative를 활용한 batch의 loss를 계산합니다.
     pred : bsz x bsz 또는 bsz x bsz*2의 logit 값을 가짐. 후자는 hard negative를 포함하는 경우.
