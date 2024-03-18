@@ -1,6 +1,8 @@
 # Dense Passage Retrieval for Open-Domain Question Answering
 ## Abstract
-Open-domain question answering relies on efficient passage retrieval to select candidate contexts, where traditional sparse vector space models, such as TF-IDF or BM25, are the de facto method. In this work, we show that retrieval can be practically implemented using dense representations alone, where embeddings are learned from a small number of questions and passages by a simple dualencoder framework. When evaluated on a wide range of open-domain QA datasets, our dense retriever outperforms a strong LuceneBM25 system greatly by 9%-19% absolute in terms of top-20 passage retrieval accuracy, and helps our end-to-end QA system establish new state-of-the-art on multiple open-domain QA benchmarks.1
+Open-domain question answering relies on efficient passage retrieval to select candidate contexts, where traditional sparse vector space models, such as TF-IDF or BM25, are the de facto method. In this work, we show that retrieval can be practically implemented using dense representations alone, where embeddings are learned from a small number of questions and passages by a simple dualencoder framework. When evaluated on a wide range of open-domain QA datasets, our dense retriever outperforms a strong LuceneBM25 system greatly by 9%-19% absolute in terms of top-20 passage retrieval accuracy, and helps our end-to-end QA system establish new state-of-the-art on multiple open-domain QA benchmarks
+
+개방형 도메인 질문 답변은 후보 문맥을 선택하기 위해 효율적인 구절 검색에 의존하는데, TF-IDF나 BM25와 같은 기존의 희소 벡터 공간 모델이 사실상 유일한 방법입니다. 이 연구에서는 간단한 이중 인코더 프레임워크를 통해 소수의 질문과 구절에서 임베딩을 학습하는 고밀도 표현만으로 검색을 실질적으로 구현할 수 있음을 보여줍니다. 광범위한 오픈 도메인 QA 데이터 세트에서 평가했을 때, 당사의 고밀도 검색기는 상위 20개 구절 검색 정확도 측면에서 강력한 LuceneBM25 시스템을 9%-19% 절대적으로 크게 능가하며, 여러 오픈 도메인 QA 벤치마크에서 엔드투엔드 QA 시스템이 새로운 최신 기술을 구축하는 데 도움이 됩니다.
 
 ## Introduction
 Open-domain question answering (QA) (Voorhees, 1999) is a task that answers factoid questions using a large collection of documents. While early QA systems are often complicated and consist of multiple components (Ferrucci (2012); Moldovan et al. (2003), inter alia), the advances of reading comprehension models suggest a much simplified two-stage framework: (1) a context retriever first selects a small subset of passages where some of them contain the answer to the question, and then (2) a machine reader can thoroughly examine the retrieved contexts and identify the correct answer (Chen et al., 2017). Although reducing open-domain QA to machine reading is a very reasonable strategy, a huge performance degradation is often observed in practice2 , indicating the needs of improving retrieval.
@@ -13,15 +15,33 @@ In this paper, we address the question: can we train a better dense embedding mo
 
 Our contributions are twofold. First, we demonstrate that with the proper training setup, simply fine-tuning the question and passage encoders on existing question-passage pairs is sufficient to greatly outperform BM25. Our empirical results also suggest that additional pretraining may not be needed. Second, we verify that, in the context of open-domain question answering, a higher retrieval precision indeed translates to a higher end-to-end QA accuracy. By applying a modern reader model to the top retrieved passages, we achieve comparable or better results on multiple QA datasets in the open-retrieval setting, compared to several, much complicated systems.
 
+개방형 도메인 질문 답변(QA)(Voorhees, 1999)은 대량의 문서 모음을 사용하여 사실적 질문에 답변하는 작업입니다. 초기 QA 시스템은 종종 복잡하고 여러 구성 요소로 이루어져 있지만(Ferrucci, 2012; Moldovan 등, 2003), 독해 모델의 발전으로 (1) 문맥 검색기가 먼저 질문에 대한 답이 포함된 구절의 작은 하위 집합을 선택한 다음 (2) 기계 리더가 검색된 문맥을 철저히 검토하여 정답을 식별하는 훨씬 단순화된 2단계 프레임워크가 제안되었습니다(Chen et al., 2017). 오픈 도메인 QA를 기계 판독으로 줄이는 것은 매우 합리적인 전략이지만, 실제로는 엄청난 성능 저하가 종종 관찰되어2 검색을 개선해야 할 필요성을 나타냅니다.
+
+오픈 도메인 QA에서의 검색은 일반적으로 TF-IDF 또는 BM25(Robertson and Zaragoza, 2009)를 사용하여 구현되며, 이는 역 인덱스로 키워드를 효율적으로 매칭하고 질문과 문맥을 고차원의 희소 벡터(가중치 포함)로 표현하는 것으로 볼 수 있습니다. 반대로, 조밀하고 잠재적인 의미 인코딩은 설계상 스파스 표현을 보완합니다. 예를 들어, 완전히 다른 토큰으로 구성된 동의어 또는 의역어도 서로 가까운 벡터에 매핑될 수 있습니다. "반지의 제왕에서 악당은 누구인가요?"라는 질문에 "살라 베이커는 반지의 제왕 3부작에서 악당 사우론을 연기한 것으로 가장 잘 알려져 있습니다."라는 문맥에서 대답할 수 있는 경우를 생각해 보세요. 용어 기반 시스템은 이러한 문맥을 검색하는 데 어려움을 겪을 수 있지만, 고밀도 검색 시스템은 '나쁜 사람'과 '악당'을 더 잘 매칭하고 올바른 문맥을 가져올 수 있습니다. 또한 임베딩 함수를 조정하여 고밀도 인코딩을 학습할 수 있으므로 작업별 표현을 위한 추가적인 유연성을 제공합니다. 특수한 인메모리 데이터 구조와 인덱싱 체계를 사용하면 최대 내부 곱 검색(MIPS) 알고리즘을 사용하여 검색을 효율적으로 수행할 수 있습니다(예: Shrivastava and Li(2014), Guo et al.(2016)).
+
+그러나 일반적으로 좋은 고밀도 벡터 표현을 학습하려면 많은 수의 레이블이 지정된 질문과 컨텍스트 쌍이 필요하다고 알려져 있습니다. 따라서 고밀도 검색 방법은 추가적인 사전 학습을 위해 마스크된 문장을 포함하는 블록을 예측하는 정교한 역 클로즈 과제(ICT) 목표를 제안하는 ORQA(Lee et al., 2019) 이전에는 오픈 도메인 QA에서 TF-IDF/BM25보다 성능이 뛰어난 것으로 나타난 적이 없습니다. 그런 다음 질문 인코더와 리더 모델은 질문과 답변 쌍을 함께 사용하여 미세 조정됩니다. ORQA는 여러 오픈 도메인 QA 데이터 세트에서 새로운 최첨단 결과를 설정하면서 밀도 검색이 BM25를 능가할 수 있음을 성공적으로 입증했지만, 두 가지 약점을 가지고 있기도 합니다. 첫째, ICT 사전 학습은 계산 집약적이며 일반 문장이 목적 함수의 질문에 대한 좋은 대용어인지 완전히 명확하지 않습니다. 둘째, 문맥 인코더는 질문과 답변 쌍을 사용하여 미세 조정되지 않기 때문에 해당 표현이 차선책일 수 있습니다.
+
+이 백서에서는 추가 사전 훈련 없이 질문과 구절(또는 답) 쌍만을 사용해 더 조밀한 임베딩 모델을 훈련할 수 있는가라는 질문을 다룹니다. 현재 표준이 된 BERT 사전 훈련 모델(Devlin et al., 2019)과 이중 인코더 아키텍처(Bromley et al., 1994)를 활용하여 상대적으로 적은 수의 질문과 구절 쌍을 사용하여 올바른 훈련 체계를 개발하는 데 중점을 둡니다. 일련의 신중한 제거 연구를 통해 최종 솔루션은 놀랍도록 간단합니다. 임베딩은 문제와 관련 구절 벡터의 내부 곱을 최대화하는 데 최적화되어 있으며, 모든 문제와 구절 쌍을 일괄적으로 비교하는 것을 목표로 합니다. 밀도 높은 구절 리트리버(DPR)는 매우 강력합니다. BM25를 큰 차이로 능가할 뿐만 아니라(상위 5개 정확도에서 65.2% 대 42.9%), 개방형 자연 문제 환경에서 ORQA(41.5% 대 33.3%)에 비해 엔드투엔드 QA 정확도가 크게 향상되었습니다(Lee et al., 2019; Kwiatkowski et al., 2019).
+
+우리의 기여는 두 가지입니다. 첫째, 적절한 훈련 설정을 통해 기존 문제-지문 쌍에서 문제와 지문 인코더를 미세 조정하는 것만으로도 BM25의 성능을 크게 향상시킬 수 있음을 입증했습니다. 또한 경험적 결과는 추가적인 사전 훈련이 필요하지 않을 수도 있음을 시사합니다. 둘째, 오픈 도메인 질문 답변의 맥락에서 검색 정밀도가 높을수록 실제로 엔드투엔드 QA 정확도가 높아진다는 사실을 확인했습니다. 검색된 상위 구절에 최신 리더 모델을 적용함으로써 개방형 검색 환경의 여러 QA 데이터 세트에서 훨씬 복잡한 여러 시스템에 비해 비슷하거나 더 나은 결과를 얻을 수 있었습니다.
+
+
 ## Background
 
 The problem of open-domain QA studied in this paper can be described as follows. Given a factoid question, such as “Who first voiced Meg on Family Guy?” or “Where was the 8th Dalai Lama born?”, a system is required to answer it using a large corpus of diversified topics. More specifically, we assume the extractive QA setting, in which the answer is restricted to a span appearing in one or more passages in the corpus. Assume that our collection contains D documents, d1, d2, · · · , dD. We first split each of the documents into text passages of equal lengths as the basic retrieval units3 and get M total passages in our corpus C = {p1, p2, . . . , pM}, where each passage pi can be viewed as a sequence of tokens w (i) 1 , w (i) 2 , · · · , w (i) |pi| . Given a question q,
 
 the task is to find a span w (i) s , w (i) s+1, · · · , w (i) e from one of the passages pi that can answer the question. Notice that to cover a wide variety of domains, the corpus size can easily range from millions of documents (e.g., Wikipedia) to billions (e.g., the Web). As a result, any open-domain QA system needs to include an efficient retriever component that can select a small set of relevant texts, before applying the reader to extract the answer (Chen et al., 2017).4 Formally speaking, a retriever R : (q, C) → CF is a function that takes as input a question q and a corpus C and returns a much smaller filter set of texts CF ⊂ C, where |CF | = k  |C|. For a fixed k, a retriever can be evaluated in isolation on top-k retrieval accuracy, which is the fraction of questions for which CF contains a span that answers the question.
 
+이 백서에서 연구한 오픈 도메인 QA의 문제는 다음과 같이 설명할 수 있습니다. "패밀리 가이에서 멕의 목소리를 처음 낸 사람은 누구인가?" 또는 "제8대 달라이 라마는 어디에서 태어났나?"와 같은 팩트형 질문이 주어지면 다양한 주제의 대규모 말뭉치를 사용하여 답변하는 시스템이 필요합니다. 좀 더 구체적으로 말뭉치에서 하나 이상의 구절에 나타나는 범위로 답변이 제한되는 추출 QA 설정을 가정해 보겠습니다. 컬렉션에 d1, d2, - - - , dD 문서가 포함되어 있다고 가정합니다. 먼저 각 문서를 기본 검색 단위3와 동일한 길이의 텍스트 구절로 분할하여 말뭉치 C = {p1, p2, ... . , pM}을 구하며, 여기서 각 구절 pi는 토큰 w (i) 1 , w (i) 2 , - - - , w (i) |pi| 의 시퀀스로 볼 수 있습니다. 질문 q가 주어졌습니다,
+
+의 경우, 질문에 답할 수 있는 구절 파이 중 하나에서 w (i) s , w (i) s+1, - - - , w (i) e를 찾는 것이 과제입니다. 다양한 도메인을 포괄하기 위해 말뭉치 크기는 수백만 개의 문서(예: Wikipedia)에서 수십억 개의 문서(예: 웹)에 이르기까지 쉽게 다양할 수 있다는 점에 유의하세요. 따라서 모든 오픈 도메인 QA 시스템에는 판독기를 적용하여 답을 추출하기 전에 소수의 관련 텍스트 집합을 선택할 수 있는 효율적인 리트리버 구성 요소가 포함되어야 합니다(Chen et al., 2017).4 공식적으로 말하면, 리트리버 R : (q, C) → CF는 질문 q와 코퍼스 C를 입력으로 받아 훨씬 작은 필터 집합인 텍스트 CF ⊂ C를 반환하는 함수로서, 여기서 |CF | = k |C|를 반환합니다. 고정된 k의 경우, 검색기는 CF에 질문에 대한 답을 제공하는 스팬이 포함된 질문의 비율인 상위 k 검색 정확도에 대해 개별적으로 평가할 수 있습니다.
+
+
 ## Dense Passage Retriever (DPR)
 
 We focus our research in this work on improving the retrieval component in open-domain QA. Given a collection of M text passages, the goal of our dense passage retriever (DPR) is to index all the passages in a low-dimensional and continuous space, such that it can retrieve efficiently the top k passages relevant to the input question for the reader at run-time. Note that M can be very large (e.g., 21 million passages in our experiments, described in Section 4.1) and k is usually small, such as 20–100.
+
+이번 연구에서는 오픈 도메인 QA의 검색 구성 요소를 개선하는 데 초점을 맞췄습니다. M개의 텍스트 구절 모음이 주어졌을 때, 밀도 높은 구절 검색기(DPR)의 목표는 저차원의 연속 공간에서 모든 구절을 색인하여 런타임에 독자가 입력한 질문과 관련된 상위 k개의 구절을 효율적으로 검색할 수 있도록 하는 것입니다. M은 매우 클 수 있으며(예: 4.1절에 설명된 실험에서 2100만 개의 구절), k는 일반적으로 20-100과 같이 작습니다.
 
 ### Overview
 Our dense passage retriever (DPR) uses a dense encoder EP (·) which maps any text passage to a ddimensional real-valued vectors and builds an index for all the M passages that we will use for retrieval. At run-time, DPR applies a different encoder EQ(·) that maps the input question to a d-dimensional vector, and retrieves k passages of which vectors are the closest to the question vector. We define the similarity between the question and the passage using the dot product of their vectors: 
@@ -33,6 +53,15 @@ Although more expressive model forms for measuring the similarity between a ques
 Encoders Although in principle the question and passage encoders can be implemented by any neural networks, in this work we use two independent BERT (Devlin et al., 2019) networks (base, uncased) and take the representation at the [CLS] token as the output, so d = 768.
 
 Inference During inference time, we apply the passage encoder EP to all the passages and index them using FAISS (Johnson et al., 2017) offline. FAISS is an extremely efficient, open-source library for similarity search and clustering of dense vectors, which can easily be applied to billions of vectors. Given a question q at run-time, we derive its embedding vq = EQ(q) and retrieve the top k passages with embeddings closest to vq.
+
+밀도 구절 검색(DPR)은 모든 텍스트 구절을 d차원 실수값 벡터에 매핑하는 밀도 인코더 EP(-)를 사용해 검색에 사용할 모든 M 구절에 대한 인덱스를 구축합니다. 런타임에 DPR은 입력 문제를 d차원 벡터에 매핑하는 다른 인코더 EQ(-)를 적용하여 문제 벡터에 가장 가까운 벡터가 있는 k개의 구절을 검색합니다. 벡터의 도트 곱을 사용하여 문제와 구절 사이의 유사성을 정의합니다:
+
+여러 층의 교차 주의로 구성된 네트워크와 같이 문제와 구절 사이의 유사도를 측정하는 더 표현적인 모델 형태가 존재하지만, 구절 집합의 표현을 미리 계산할 수 있도록 유사도 함수는 분해 가능해야 합니다. 대부분의 분해 가능한 유사도 함수는 유클리드 거리(L2)의 일부 변환입니다. 예를 들어 코사인은 단위 벡터의 내적 곱에 해당하며, 마하라노비스 거리는 변환된 공간에서 L2 거리와 동일합니다. 내적 곱 검색은 코사인 유사도 및 L2 거리와의 연관성뿐만 아니라 널리 사용되고 연구되어 왔습니다(Mussmann and Ermon, 2016; Ram and Gray, 2012). 우리의 제거 연구에서 다른 유사도 함수의 성능이 비슷하다는 것을 발견했기 때문에(섹션 5.2, 부록 B), 더 간단한 내적 곱 함수를 선택하고 더 나은 인코더를 학습하여 밀도 통과 검색을 개선했습니다.
+
+인코더 원칙적으로 문제 및 구절 인코더는 모든 신경망으로 구현할 수 있지만, 이 작업에서는 두 개의 독립적인 BERT(Devlin et al., 2019) 네트워크(기본, 대소문자 구분 없음)를 사용하고 [CLS] 토큰의 표현을 출력으로 사용하므로 d = 768이 됩니다.
+
+추론 시간 동안 모든 구절에 구절 인코더 EP를 적용하고 오프라인에서 FAISS(Johnson et al., 2017)를 사용해 색인을 생성합니다. FAISS는 고밀도 벡터의 유사도 검색과 클러스터링을 위한 매우 효율적인 오픈 소스 라이브러리로, 수십억 개의 벡터에 쉽게 적용할 수 있습니다. 런타임에 질문 q가 주어지면, 그 임베딩 vq = EQ(q)를 도출하고 vq에 가장 가까운 임베딩을 가진 상위 k개의 구절을 검색합니다.
+
 
 ### Training
 Training the encoders so that the dot-product similarity (Eq. (1)) becomes a good ranking function for retrieval is essentially a metric learning problem (Kulis, 2013). The goal is to create a vector space such that relevant pairs of questions and passages will have smaller distance (i.e., higher similarity) than the irrelevant ones, by learning a better embedding function.
@@ -49,13 +78,31 @@ In-batch negatives Assume that we have B questions in a mini-batch and each one 
 
 The trick of in-batch negatives has been used in the full batch setting (Yih et al., 2011) and more recently for mini-batch (Henderson et al., 2017; Gillick et al., 2019). It has been shown to be an effective strategy for learning a dual-encoder model that boosts the number of training examples.
 
+점-제품 유사도(식 (1))가 검색에 좋은 순위 함수가 되도록 인코더를 훈련하는 것은 본질적으로 메트릭 학습 문제입니다(Kulis, 2013). 목표는 더 나은 임베딩 함수를 학습하여 관련성이 있는 문제와 구절 쌍이 관련성이 없는 문제와 구절보다 더 작은 거리(즉, 더 높은 유사도)를 갖도록 벡터 공간을 만드는 것입니다.
+
+D = {hqi , p+ i , p- i,1 , - - - , p- i,ni}m i=1 을 m개의 인스턴스로 구성된 훈련 데이터라고 합니다. 각 인스턴스에는 하나의 문제 qi와 하나의 관련성 있는(정답) 구절 p + i 및 관련성 없는(부답) 구절 p - i,j 가 포함됩니다. 손실 함수는 양의 구절의 음의 로그 확률로 최적화합니다:
+
+L(qi , p+ i , p− i,1 , · · · , p− i,n) (2)
+
+= − log e sim(qi,p + i ) e sim(qi,p + i ) + Pn j=1 e sim(qi,p − i,j )
+
+긍정 및 부정 구절 검색 문제의 경우 긍정 예시는 명시적으로 제공되는 반면, 부정 예시는 매우 방대한 풀에서 선택해야 하는 경우가 많습니다. 예를 들어, 문제와 관련된 구절은 QA 데이터 세트에 제공되거나 답을 사용하여 찾을 수 있습니다. 컬렉션의 다른 모든 구절은 명시적으로 지정되지 않았지만 기본적으로 관련성이 없는 것으로 볼 수 있습니다. 실제로 부정 예문을 선택하는 방법은 종종 간과되지만 고품질 인코더를 학습하는 데 결정적일 수 있습니다. (1) 무작위: 말뭉치에서 임의의 구절, (2) BM25: 답을 포함하지 않지만 대부분의 질문 토큰과 일치하는 BM25가 반환한 상위 구절, (3) 골드: 훈련 세트에 나타나는 다른 질문과 짝을 이루는 긍정적인 구절. 5.2절에서 다양한 유형의 부정 구절과 훈련 방식이 미치는 영향에 대해 설명하겠습니다. 가장 좋은 모델은 동일한 미니 배치의 골드 구절과 BM25 부정 구절 하나를 사용합니다. 특히 같은 배치의 골드 통로를 네거티브 통로로 재사용하면 계산을 효율적으로 하면서도 뛰어난 성능을 달성할 수 있습니다. 아래에서 이 접근 방식에 대해 설명합니다.
+
+배치 내 네거티브 미니 배치에 B개의 문제가 있고 각 문제가 관련 구절과 연계되어 있다고 가정합니다. Q와 P를 B 크기의 배치에 포함된 문제와 구절의 (B×d) 행렬이라고 합니다. S = QPT는 유사도 점수의 (B × B) 행렬로, 각 행이 문제와 짝을 이루는 B개의 구절에 해당합니다. 이러한 방식으로 계산을 재사용하고 각 배치에서 B2 (qi , pj ) 문제/지문 쌍에 대해 효과적으로 훈련합니다. 모든 (qi , pj ) 쌍은 i = j일 때 양의 예시이고, 그렇지 않으면 음의 예시입니다. 이렇게 하면 각 배치에 B개의 훈련 인스턴스가 생성되며, 각 문제에는 B-1개의 부정적 구절이 있습니다.
+
+배치 내 네거티브의 트릭은 전체 배치 설정(Yih et al., 2011)에서 사용되었으며 최근에는 미니 배치(Henderson et al., 2017; Gillick et al., 2019)에도 사용되었습니다. 이는 훈련 예시 수를 늘리는 이중 인코더 모델을 학습하는 데 효과적인 전략인 것으로 나타났습니다.
+
 ## Experimental Setup
 
 In this section, we describe the data we used for experiments and the basic setup
 
+이 섹션에서는 실험에 사용한 데이터와 기본 설정에 대해 설명합니다.
+
 ### Wikipedia Data Pre-processing
 
 Following (Lee et al., 2019), we use the English Wikipedia dump from Dec. 20, 2018 as the source documents for answering questions. We first apply the pre-processing code released in DrQA (Chen et al., 2017) to extract the clean, text-portion of articles from the Wikipedia dump. This step removes semi-structured data, such as tables, infoboxes, lists, as well as the disambiguation pages. We then split each article into multiple, disjoint text blocks of 100 words as passages, serving as our basic retrieval units, following (Wang et al., 2019), which results in 21,015,324 passages in the end.5 Each passage is also prepended with the title of the Wikipedia article where the passage is from, along with an [SEP] token.
+
+(Lee et al., 2019)에 따라 2018년 12월 20일의 영문 위키백과 덤프를 질문에 대한 답변을 위한 소스 문서로 사용합니다. 먼저 DrQA에서 공개된 전처리 코드(Chen et al., 2017)를 적용하여 위키백과 덤프에서 깨끗한 텍스트 부분의 문서를 추출합니다. 이 단계에서는 표, 인포박스, 목록과 같은 반정형 데이터와 동의어 페이지가 제거됩니다. 그런 다음, 기본 검색 단위로 사용되는 100단어씩의 여러 개의 분리된 텍스트 블록으로 각 기사를 구절로 분할하여 (Wang et al., 2019) 최종적으로 21,015,324개의 구절이 생성됩니다.5 각 구절에는 [SEP] 토큰과 함께 구절이 나온 Wikipedia 문서의 제목이 앞에 붙게 됩니다.
 
 ### Question Answering Datasets
 
@@ -65,6 +112,13 @@ SQuAD v1.1 (Rajpurkar et al., 2016) is a popular benchmark dataset for reading c
 
 Selection of positive passages Because only pairs of questions and answers are provided in TREC, WebQuestions and TriviaQA6 , we use the highest-ranked passage from BM25 that contains the answer as the positive passage. If none of the top 100 retrieved passages has the answer, the question will be discarded. For SQuAD and Natural Questions, since the original passages have been split and processed differently than our pool of candidate passages, we match and replace each gold passage with the corresponding passage in the candidate pool.7 We discard the questions when the matching is failed due to different Wikipedia versions or pre-processing. Table 1 shows the number of questions in training/dev/test sets for all the datasets and the actual questions used for training the retriever.
 
+이전 연구(Lee et al., 2019)에서와 동일한 5개의 QA 데이터 세트와 훈련/개발/테스트 분할 방법을 사용했습니다. 아래에서는 각 데이터 세트에 대해 간략하게 설명하고 데이터 준비에 대한 자세한 내용은 해당 논문을 참조하시기 바랍니다. 자연스러운 질문(NQ)(Kwiatkowski et al., 2019)은 엔드투엔드 질문 답변을 위해 설계되었습니다. 질문은 실제 Google 검색 쿼리에서 채굴되었으며, 답변은 주석가가 식별한 Wikipedia 문서에 걸쳐 있습니다. TriviaQA(Joshi et al., 2017)는 원래 웹에서 스크랩한 답변이 포함된 퀴즈 질문 세트를 포함합니다. WebQuestions(WQ)(Berant 외., 2013)는 Google Suggest API를 사용하여 선택한 질문으로 구성되며, 답변은 Freebase의 엔티티입니다. 큐레이티드TREC(TREC)(Baudis and ˇ Sediv ˇ y`, 2015)은 다양한 웹 소스뿐만 아니라 TREC QA 트랙의 질문을 소싱하며 비정형 코퍼스로부터 오픈 도메인 QA를 위해 고안된 것입니다.
+
+SQuAD v1.1(Rajpurkar et al., 2016)은 독해력 분야에서 널리 사용되는 벤치마크 데이터 세트입니다. 주석가에게 Wikipedia 문단을 제시하고 주어진 텍스트에서 답을 구할 수 있는 질문을 작성하도록 요청했습니다. 이전에도 오픈 도메인 QA 연구에 SQuAD를 사용한 적이 있지만, 제공된 문단이 없으면 문맥이 부족한 질문이 많기 때문에 이상적이지 않습니다. 하지만 이전 작업과 공정하게 비교하기 위해 실험에 포함시켰으며 5.1절에서 자세히 설명하겠습니다.
+
+정답 구절 선택 TREC, WebQuestions 및 TriviaQA6에서는 질문과 답의 쌍만 제공되므로 답을 포함하는 BM25에서 가장 높은 순위의 구절을 정답 구절로 사용합니다. 검색된 상위 100개의 구절 중 정답이 없는 경우 해당 문제는 폐기됩니다. SQuAD 및 자연 문제의 경우, 원본 구절이 후보 구절 풀과 다르게 분할 및 처리되었으므로 각 골드 구절을 후보 풀의 해당 구절과 매칭하여 대체합니다.7 다른 Wikipedia 버전 또는 사전 처리로 인해 매칭에 실패하면 해당 문제는 폐기됩니다. 표 1은 모든 데이터 세트에 대한 훈련/개발/테스트 세트의 문제 수와 리트리버 훈련에 사용된 실제 문제 수를 보여줍니다.
+
+
 ## Experiments: Passage Retrieval
 
 In this section, we evaluate the retrieval performance of our Dense Passage Retriever (DPR), along with analysis on how its output differs from traditional retrieval methods, the effects of different training schemes and the run-time efficiency.
@@ -73,11 +127,21 @@ The DPR model used in our main experiments is trained using the in-batch negativ
 
 While it is good to have the flexibility to adapt the retriever to each dataset, it would also be desirable to obtain a single retriever that works well across the board. To this end, we train a multidataset encoder by combining training data from all datasets excluding SQuAD.8 In addition to DPR, we also present the results of BM25, the traditional retrieval method9 and BM25+DPR, using a linear combination of their scores as the new ranking function. Specifically, we obtain two initial sets of top-2000 passages based on BM25 and DPR, respectively, and rerank the union of them using BM25(q,p) + λ · sim(q, p) as the ranking function. We used λ = 1.1 based on the retrieval accuracy in the development set.
 
+이 섹션에서는 기존 검색 방법과의 차이점, 다양한 훈련 체계의 효과, 런타임 효율성에 대한 분석과 함께 DPR(Dense Passage Retriever)의 검색 성능을 평가합니다.
+
+주요 실험에 사용된 DPR 모델은 배치 크기가 128인 배치 내 부정 설정(섹션 3.2)과 문제당 하나의 추가 BM25 부정 구절을 사용하여 훈련되었습니다. 대규모 데이터 세트(NQ, TriviaQA, SQuAD)의 경우 최대 40회, 소규모 데이터 세트(TREC, WQ)의 경우 100회까지 문제 및 구절 인코더를 훈련했으며, 학습률은 10-5, 워밍업 및 탈락률 0.1의 선형 스케줄링이 포함된 Adam을 사용했습니다.
+
+각 데이터 세트에 맞게 리트리버를 유연하게 조정할 수 있는 것도 좋지만, 전반적으로 잘 작동하는 단일 리트리버를 얻는 것도 바람직할 것입니다. 이를 위해 저희는 SQuAD를 제외한 모든 데이터 세트의 훈련 데이터를 결합하여 멀티 데이터 세트 인코더를 훈련합니다.8 DPR 외에도 전통적인 검색 방법인 BM25와9 BM25+DPR의 결과를 새로운 순위 함수로 사용하여 점수의 선형 조합을 제시합니다. 구체적으로 BM25와 DPR에 따라 각각 상위 2000개의 구절로 구성된 두 개의 초기 집합을 얻은 다음, BM25(q,p) + λ - sim(q,p)을 순위 함수로 사용하여 이들의 조합을 다시 순위를 매깁니다. 개발 세트의 검색 정확도를 기준으로 λ = 1.1을 사용했습니다.
+
 ### Main Results
 
 Table 2 compares different passage retrieval systems on five QA datasets, using the top-k accuracy (k ∈ {20, 100}). With the exception of SQuAD, DPR performs consistently better than BM25 on all datasets. The gap is especially large when k is small (e.g., 78.4% vs. 59.1% for top-20 accuracy on Natural Questions). When training with multiple datasets, TREC, the smallest dataset of the five, benefits greatly from more training examples. In contrast, Natural Questions and WebQuestions improve modestly and TriviaQA degrades slightly. Results can be improved further in some cases by combining DPR with BM25 in both single- and multi-dataset settings.
 
 We conjecture that the lower performance on SQuAD is due to two reasons. First, the annotators wrote questions after seeing the passage. As a result, there is a high lexical overlap between passages and questions, which gives BM25 a clear advantage. Second, the data was collected from only 500+ Wikipedia articles and thus the distribution of training examples is extremely biased, as argued previously by Lee et al. (2019).
+
+표 2는 상위 k 정확도(k ∈ {20, 100})를 사용하여 5개의 QA 데이터 세트에서 서로 다른 구절 검색 시스템을 비교한 것입니다. SQuAD를 제외한 모든 데이터 세트에서 DPR이 BM25보다 일관되게 더 나은 성능을 보였습니다. 특히 k가 작을 때 그 격차가 큽니다(예: 자연 문제에서 상위 20개 정확도의 경우 78.4% 대 59.1%). 여러 데이터셋으로 훈련할 경우, 다섯 가지 데이터셋 중 가장 작은 데이터셋인 TREC은 더 많은 훈련 예제를 통해 큰 이점을 얻습니다. 반면, 자연 질문과 웹 질문은 소폭 개선되고 TriviaQA는 약간 성능이 저하됩니다. 단일 및 다중 데이터 세트 설정 모두에서 DPR과 BM25를 결합하면 결과를 더욱 개선할 수 있습니다.
+
+저희는 SQuAD의 낮은 성적이 두 가지 이유 때문인 것으로 추측하고 있습니다. 첫째, 주석가들이 지문을 본 후 문제를 작성했기 때문입니다. 그 결과, 구절과 문제 사이에 어휘 중복이 많아서 BM25가 분명한 이점을 얻었습니다. 둘째, 데이터는 500개 이상의 위키피디아 문서에서만 수집되었기 때문에 앞서 Lee 등(2019)이 주장한 것처럼 훈련 예시 분포가 극도로 편향되어 있습니다.
 
 ### Ablation Study on Model Training
 
