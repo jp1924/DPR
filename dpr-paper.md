@@ -163,9 +163,31 @@ Similarity and loss Besides dot product, cosine and Euclidean L2 distance are al
 
 Cross-dataset generalization One interesting question regarding DPR’s discriminative training is how much performance degradation it may suffer from a non-iid setting. In other words, can it still generalize well when directly applied to a different dataset without additional fine-tuning? To test the cross-dataset generalization, we train DPR on Natural Questions only and test it directly on the smaller WebQuestions and CuratedTREC datasets. We find that DPR generalizes well, with 3-5 points loss from the best performing fine-tuned model in top-20 retrieval accuracy (69.9/86.3 vs. 75.0/89.1 for WebQuestions and TREC, respectively), while still greatly outperforming the BM25 baseline (55.0/70.9).
 
+
+다양한 모델 훈련 옵션이 결과에 어떤 영향을 미치는지 자세히 알아보기 위해 몇 가지 추가 실험을 수행하고 그 결과를 아래에서 논의합니다.
+ 
+예제 효율성 좋은 구절 검색 성능을 달성하기 위해 얼마나 많은 훈련 예제가 필요한지 살펴봅니다. 그림 1은 자연어 문제 개발 세트에서 측정한 다양한 훈련 예제 수에 따른 상위 k 검색 정확도를 보여줍니다. 그림에서 볼 수 있듯이, 1,000개의 예제만을 사용하여 훈련된 고밀도 구절 검색기는 이미 BM25보다 성능이 뛰어납니다. 이는 일반적인 사전 학습 언어 모델을 사용하면 적은 수의 질문-구절 쌍으로도 고품질의 고밀도 구절 리트리버를 훈련할 수 있음을 시사합니다. 훈련 예제를 더 추가하면(1,000개에서 59,000개로) 검색 정확도가 지속적으로 향상됩니다.
+ 
+배치 내 부정 훈련 자연 문제 개발 세트에 대해 다양한 훈련 방식을 테스트하고 그 결과를 표 3에 요약했습니다. 맨 위 블록은 표준 1-of-N 훈련 설정으로, 배치의 각 문항은 긍정적인 구절과 그 자체의 부정적 구절 세트와 짝을 이룹니다(식 (2)). 이 설정에서는 k ≥ 20인 경우 무작위, BM25 또는 골드 구절(다른 문제의 정답 구절)과 같은 부정 구절의 선택이 상위 k 정확도에 큰 영향을 미치지 않는다는 것을 알 수 있습니다.
+ 
+중간 복은 일괄 네거티브 트레이닝(섹션 3.2) 설정입니다. 비슷한 구성(7개의 골드 네거티브 구절)을 사용하면 배치 내 네거티브 훈련이 결과를 크게 향상시키는 것으로 나타났습니다. 이 둘의 주요 차이점은 골드 네거티브 구절이 동일한 배치에서 나오는지 아니면 전체 훈련 세트에서 나오는지 여부입니다. 사실상 배치 내 부정 훈련은 새로운 예제를 생성하는 대신 배치에 이미 있는 부정 예제를 재사용하는 쉽고 메모리 효율적인 방법입니다. 더 많은 쌍을 생성하므로 훈련 예제 수가 증가하여 모델 성능 향상에 기여할 수 있습니다. 결과적으로 배치 크기가 커짐에 따라 정확도가 지속적으로 향상됩니다.
+ 
+마지막으로, 문제가 주어졌을 때 BM25 점수가 높지만 답 문자열(하단 블록)이 포함되지 않은 추가 "어려운" 부정 구절을 사용하여 일괄 부정 훈련을 살펴봅니다. 이러한 추가 구절은 동일한 배치의 모든 문제에 대해 부정 구절로 사용됩니다. BM25 부정 구절을 하나 추가하면 결과가 크게 개선되는 반면, 두 개를 추가하면 더 이상 도움이 되지 않는 것으로 나타났습니다.
+ 
+골드 구절의 영향 원본 데이터 세트의 골드 문맥과 일치하는 구절(가능한 경우)을 긍정적인 예시로 사용합니다(섹션 4.2).
+ 
+자연 문제에 대한 실험 결과, 원거리 감독 구절(정답이 포함된 가장 높은 순위의 BM25 구절 사용)로 전환하는 경우 검색 시 상위 k 정확도가 1점 낮아지는 작은 영향만 있는 것으로 나타났습니다. 자세한 내용은 부록 A에 나와 있습니다.
+ 
+유사도 및 손실 도트 곱 외에도 코사인과 유클리드 L2 거리도 분해 가능한 유사도 함수로 일반적으로 사용됩니다. 이러한 대안을 테스트한 결과, L2는 도트 곱과 비슷한 성능을 보였으며, 두 가지 모두 코사인보다 우수한 것으로 나타났습니다. 마찬가지로, 음의 로지스틱 가능성 외에도 순위를 매기는 데 널리 사용되는 옵션은 질문에 대해 긍정적인 구절과 부정적인 구절을 직접 비교하는 삼중 손실입니다(Burges et al., 2005). 실험 결과 삼중 손실은 결과에 큰 영향을 미치지 않는 것으로 나타났습니다. 자세한 내용은 부록 B에서 확인할 수 있습니다.
+ 
+데이터 세트 간 일반화 DPR의 판별 훈련과 관련하여 흥미로운 질문 중 하나는 비아이디 설정으로 인해 성능이 얼마나 저하될 수 있는지입니다. 즉, 추가적인 미세 조정 없이 다른 데이터 세트에 직접 적용해도 여전히 잘 일반화할 수 있을까요? 데이터 세트 간 일반화를 테스트하기 위해 자연스러운 질문에 대해서만 DPR을 학습시키고 더 작은 규모의 WebQuestions 및 CuratedTREC 데이터 세트에서 직접 테스트해 보았습니다. 그 결과, DPR은 검색 정확도 상위 20위권에서 최고 성능의 미세 조정 모델과 3~5점 차이(각각 69.9/86.3점 대 WebQuestions 및 TREC의 경우 75.0/89.1점)로 잘 일반화되는 반면, BM25 기준선(55.0/70.9)을 크게 뛰어넘는 성능을 발휘하는 것으로 확인되었습니다.
+
 ### Qualitative Analysis
 
 Although DPR performs better than BM25 in general, passages retrieved by these two methods differ qualitatively. Term-matching methods like BM25 are sensitive to highly selective keywords and phrases, while DPR captures lexical variations or semantic relationships better. See Appendix C for examples and more discussion.
+
+ 
+일반적으로 DPR이 BM25보다 성능이 우수하지만, 이 두 가지 방법으로 검색된 구절은 질적으로 차이가 있습니다. BM25와 같은 용어 매칭 방식은 매우 선택적인 키워드와 구문에 민감한 반면, DPR은 어휘의 변형이나 의미 관계를 더 잘 포착합니다. 예시와 자세한 논의는 부록 C를 참조하세요.
 
 ### Run-time Efficiency
 
@@ -173,9 +195,17 @@ The main reason that we require a retrieval component for open-domain QA is to r
 
 On the other hand, the time required for building an index for dense vectors is much longer. Computing dense embeddings on 21-million passages is resource intensive, but can be easily parallelized, taking roughly 8.8 hours on 8 GPUs. However, building the FAISS index on 21-million vectors on a single server takes 8.5 hours. In comparison, building an inverted index using Lucene is much cheaper and takes only about 30 minutes in total.
 
+ 
+오픈 도메인 QA에 검색 구성 요소가 필요한 주된 이유는 독자가 고려해야 하는 후보 구절의 수를 줄이기 위해서이며, 이는 사용자의 질문에 실시간으로 답변하는 데 매우 중요합니다. 인텔 제온 CPU E5-2698 v4 @ 2.20GHz와 512GB 메모리가 장착된 서버에서 지문 검색 속도를 프로파일링했습니다. 실제값 벡터에 대한 FAISS 인메모리 인덱스10 의 도움으로 DPR은 초당 995.0 개의 문제를 처리하여 문제당 상위 100개의 구절을 반환하는 매우 효율적인 결과를 얻을 수 있었습니다. 이에 비해 BM25/Lucene(Java로 구현, 파일 인덱스 사용)은 CPU 스레드당 초당 23.7개의 문제를 처리합니다.
+ 
+반면, 고밀도 벡터에 대한 인덱스를 구축하는 데 필요한 시간은 훨씬 더 오래 걸립니다. 2,100만 개의 구절에 대한 고밀도 임베딩을 계산하는 것은 리소스 집약적이지만 쉽게 병렬화할 수 있으며, 8개의 GPU에서 약 8.8시간이 소요됩니다. 그러나 단일 서버에서 2,100만 개의 벡터에 대한 FAISS 인덱스를 구축하는 데는 8.5시간이 걸립니다. 이에 비해 Lucene을 사용해 역 인덱스를 구축하는 것은 훨씬 저렴하며 총 30분 정도밖에 걸리지 않습니다.
+
 ## Experiments: Question Answering
 
 In this section, we experiment with how different passage retrievers affect the final QA accuracy
+
+ 
+이 섹션에서는 다양한 구절 검색기가 최종 QA 정확도에 어떤 영향을 미치는지 실험해 봅니다.
 
 ### End-to-end QA System
 
@@ -189,6 +219,17 @@ where Pˆ = [P [CLS] 1 , . . . , P [CLS] k ] ∈ R h×k and wstart, wend, wselec
 
 During training, we sample one positive and m˜ −1 negative passages from the top 100 passages returned by the retrieval system (BM25 or DPR) for each question. m˜ is a hyper-parameter and we use m˜ = 24 in all the experiments. The training objective is to maximize the marginal log-likelihood of all the correct answer spans in the positive passage (the answer string may appear multiple times in one passage), combined with the log-likelihood of the positive passage being selected. We use the batch size of 16 for large (NQ, TriviaQA, SQuAD) and 4 for small (TREC, WQ) datasets, and tune k on the development set. For experiments on small datasets under the Multi setting, in which using other datasets is allowed, we fine-tune the reader trained on Natural Questions to the target dataset. All experiments were done on eight 32GB G
 
+ 
+저희는 다양한 리트리버 시스템을 직접 연결할 수 있는 엔드투엔드 질문 답변 시스템을 구현합니다. 리트리버 외에도 질문에 대한 답을 출력하는 뉴럴 리더로 구성된 QA 시스템이 있습니다. 검색된 상위 k개의 구절(실험에서는 최대 100개)이 주어지면 리더는 각 구절에 구절 선택 점수를 할당합니다. 또한 각 구절에서 답 범위를 추출하고 범위 점수를 할당합니다. 구절 선택 점수가 가장 높은 구절에서 가장 좋은 구절이 최종 답안으로 선택됩니다. 구절 선택 모델은 문제와 구절 간의 교차 주의를 통해 순위를 재조정하는 역할을 합니다. 교차 주의는 비분산적 특성으로 인해 대규모 말뭉치에서 관련 구절을 검색하는 데는 적합하지 않지만, 식 (1)에서와 같이 이중 인코더 모델 sim(q, p)보다 더 많은 용량을 가지고 있습니다. 검색된 소수의 후보 중에서 구절을 선택하는 데 적용하면 잘 작동하는 것으로 나타났습니다(Wang et al., 2019, 2018; Lin et al., 2018).
+ 
+구체적으로 Pi ∈ R L×h(1 ≤ i ≤ k)를 i 번째 통로에 대한 BERT(베이스, 실험에서는 대소문자 구분 없음) 표현이라고 하고, 여기서 L은 통로의 최대 길이이고 h는 숨겨진 차원입니다. 토큰이 답 범위의 시작/끝 위치가 될 확률과 구절이 선택될 확률은 다음과 같이 정의됩니다:
+ 
+Pstart,i(s) = 소프트맥스 Piwstart s , (3) Pend,i(t) = 소프트맥스 Piwend t , (4) Pselected(i) = 소프트맥스 Pˆ|wselected i , (5)
+ 
+여기서 Pˆ = [P [CLS] 1 , . . . , P [CLS] k ]에서 ∈ R h×k이고 wstart, wend, wselected ∈ R h는 학습 가능한 벡터입니다. i번째 구절에서 s번째 단어부터 t번째 단어까지의 스팬 점수를 Pstart,i(s) × Pend,i(t)로 계산하고, i번째 구절의 구절 선택 점수를 Pselected(i)로 계산합니다.
+ 
+훈련 중에는 각 문제에 대해 검색 시스템(BM25 또는 DPR)이 반환한 상위 100개 구절에서 양성 구절 1개와 음성 구절 m˜ -1개를 샘플링합니다. m˜ 는 초매개변수이며 모든 실험에서 m˜ = 24를 사용합니다. 훈련 목표는 양의 구절에 있는 모든 정답 범위(답 문자열이 한 구절에 여러 번 나타날 수 있음)의 한계 로그 확률과 선택되는 양의 구절의 로그 확률을 결합하여 최대화하는 것입니다. 대규모(NQ, TriviaQA, SQuAD) 데이터 세트의 경우 16개, 소규모(TREC, WQ) 데이터 세트의 경우 4개로 배치 크기를 사용하고 개발 세트에서 k를 조정합니다. 다른 데이터 세트 사용이 허용되는 다중 설정에서 소규모 데이터 세트에 대한 실험의 경우, 자연 질문에 대해 학습된 리더를 대상 데이터 세트에 맞게 미세 조정합니다. 모든 실험은 8개의 32GB G
+
 ### Results
 
 Table 4 summarizes our final end-to-end QA results, measured by exact match with the reference answer after minor normalization as in (Chen et al., 2017; Lee et al., 2019). From the table, we see that higher retriever accuracy typically leads to better final QA results: in all cases except SQuAD, answers extracted from the passages retrieved by DPR are more likely to be correct, compared to those from BM25. For large datasets like NQ and TriviaQA, models trained using multiple datasets (Multi) perform comparably to those trained using the individual training set (Single). Conversely, on smaller datasets like WQ and TREC, the multidataset setting has a clear advantage. Overall, our DPR-based models outperform the previous stateof-the-art results on four out of the five datasets, with 1% to 12% absolute differences in exact match accuracy. It is interesting to contrast our results to those of ORQA (Lee et al., 2019) and also the concurrently developed approach, REALM (Guu et al., 2020). While both methods include additional pretraining tasks and employ an expensive end-to-end training regime, DPR manages to outperform them on both NQ and TriviaQA, simply by focusing on learning a strong passage retrieval model using pairs of questions and answers. The additional pretraining tasks are likely more useful only when the target training sets are small. Although the results of DPR on WQ and TREC in the single-dataset setting are less competitive, adding more question–answer pairs helps boost the performance, achieving the new state of the art.
@@ -196,6 +237,13 @@ Table 4 summarizes our final end-to-end QA results, measured by exact match with
 To compare our pipeline training approach with joint learning, we run an ablation on Natural Questions where the retriever and reader are jointly trained, following Lee et al. (2019). This approach obtains a score of 39.8 EM, which suggests that our strategy of training a strong retriever and reader in isolation can leverage effectively available supervision, while outperforming a comparable joint training approach with a simpler design (Appendix D).
 
 One thing worth noticing is that our reader does consider more passages compared to ORQA, although it is not completely clear how much more time it takes for inference. While DPR processes up to 100 passages for each question, the reader is able to fit all of them into one batch on a single 32GB GPU, thus the latency remains almost identical to the single passage case (around 20ms). The exact impact on throughput is harder to measure: ORQA uses 2-3x longer passages compared to DPR (288 word pieces compared to our 100 tokens) and the computational complexity is superlinear in passage length. We also note that we found k = 50 to be optimal for NQ, and k = 10 leads to only marginal loss in exact match accuracy (40.8 vs. 41.5 EM on NQ), which should be roughly comparable to ORQA’s 5-passage setup
+
+ 
+표 4는 (Chen et al., 2017; Lee et al., 2019)에서와 같이 약간의 정규화를 거친 후 기준 답안과 정확히 일치하는 것으로 측정한 최종 엔드투엔드 QA 결과를 요약한 것입니다. 표를 보면 일반적으로 검색 정확도가 높을수록 최종 QA 결과가 더 좋다는 것을 알 수 있습니다. SQuAD를 제외한 모든 경우에서 DPR로 검색한 구절에서 추출한 답이 BM25의 답에 비해 정답일 가능성이 더 높습니다. NQ 및 TriviaQA와 같은 대규모 데이터 세트의 경우, 여러 데이터 세트(Multi)를 사용하여 훈련된 모델은 개별 훈련 세트(Single)를 사용하여 훈련된 모델과 비슷한 성능을 보입니다. 반대로 WQ 및 TREC와 같은 소규모 데이터 세트에서는 멀티 데이터 세트 설정이 분명한 이점이 있습니다. 전반적으로 5개의 데이터 세트 중 4개의 데이터 세트에서 DPR 기반 모델이 1%에서 12%의 절대적인 정확도 차이로 이전의 최첨단 결과보다 우수한 성능을 보였습니다. 우리의 결과를 ORQA(Lee et al., 2019) 및 동시에 개발된 접근 방식인 REALM(Guu et al., 2020)의 결과와 대조하는 것은 흥미롭습니다. 두 방법 모두 추가 사전 훈련 작업을 포함하고 고비용의 엔드투엔드 훈련 체제를 사용하지만, DPR은 단순히 질문과 답변 쌍을 사용하여 강력한 구절 검색 모델을 학습하는 데 집중함으로써 NQ와 TriviaQA 모두에서 이보다 뛰어난 성능을 보였습니다. 추가 사전 훈련 작업은 목표 훈련 세트가 작은 경우에만 더 유용할 수 있습니다. 단일 데이터 세트 설정에서 WQ 및 TREC에 대한 DPR의 결과는 경쟁력이 떨어지지만 더 많은 질문-답변 쌍을 추가하면 성능을 향상시켜 새로운 최신 기술을 달성하는 데 도움이 됩니다.
+ 
+파이프라인 훈련 접근 방식과 공동 학습을 비교하기 위해 Lee 등(2019)에 따라 리트리버와 리더가 공동으로 훈련하는 자연 질문에 대한 절제 훈련을 실행했습니다. 이 접근 방식은 39.8 EM의 점수를 얻었으며, 이는 강력한 리트리버와 리더를 따로 훈련하는 전략이 효과적으로 사용 가능한 감독을 활용하면서 더 간단한 설계로 비슷한 공동 훈련 접근 방식을 능가할 수 있음을 시사합니다(부록 D).
+
+한 가지 주목할 만한 점은, 추론에 얼마나 더 많은 시간이 걸리는지는 확실하지 않지만, 리더가 ORQA에 비해 더 많은 지문을 고려한다는 것입니다. DPR은 각 문제에 대해 최대 100개의 구절을 처리하지만, 리더는 단일 32GB GPU에서 모든 구절을 한 번에 처리할 수 있으므로 지연 시간은 단일 구절의 경우와 거의 동일하게 유지됩니다(약 20ms). 처리량에 대한 정확한 영향은 측정하기 어렵습니다: ORQA는 DPR에 비해 2~3배 더 긴 구절을 사용하며(100개의 토큰에 비해 288개의 단어 조각), 계산 복잡도는 구절 길이에 따라 초선형적입니다. 또한 k = 50이 NQ에 최적이며, k = 10은 정확한 일치 정확도에서 약간의 손실만 발생하므로(40.8 대 41.5 EM, NQ의 경우) ORQA의 5-패스구 설정과 거의 비슷합니다.
 
 ## Related Work
 
